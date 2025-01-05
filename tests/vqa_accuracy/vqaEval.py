@@ -7,6 +7,7 @@ import re
 # This code is based on the code written by Tsung-Yi Lin for MSCOCO Python API available at the following link:
 # (https://github.com/tylin/coco-caption/blob/master/pycocoevalcap/eval.py).
 import sys
+from typing import Dict, List
 
 
 class VQAEval:
@@ -196,8 +197,8 @@ class VQAEval:
         # Compute accuracy
         # =================================================
         accQA = []
-        accQuesType = {}
-        accAnsType = {}
+        accQuesType: Dict[str, List] = {}
+        accAnsType: Dict[str, List] = {}
         print("computing accuracy")
         step = 0
         for quesId in quesIds:
@@ -268,8 +269,7 @@ class VQAEval:
         for wordId, word in enumerate(outText):
             if word in self.contractions:
                 outText[wordId] = self.contractions[word]
-        outText = " ".join(outText)
-        return outText
+        return " ".join(outText)
 
     def setAccuracy(self, accQA, accQuesType, accAnsType):
         self.accuracy["overall"] = round(100 * float(sum(accQA)) / len(accQA), self.n)

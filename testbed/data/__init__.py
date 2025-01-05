@@ -1,9 +1,9 @@
+from functools import wraps
 import re
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Sized, Tuple, Union
 import inspect
 import os
 import importlib.util
-import sys
 from torch.utils.data import (
     Sampler,
     DataLoader,
@@ -15,8 +15,6 @@ from torch.utils.data import (
 )
 from .sampler import MultiBatchSampler, ConcatSampler
 from .common import (
-    register_dataset_retriever,
-    register_postprocess,
     POSTPROCESS_MAPPING,
     DATASET_RETRIEVER_MAPPING,
 )
@@ -30,31 +28,105 @@ for module_name in os.listdir(os.path.dirname(__file__)):
         importlib.import_module(f".{module_name}", package=__name__)
 
 
+def register_dataset_retriever(dataset_name: str):
+    """
+    Registers a dataset retriever function for a given dataset.
+
+    The retriever function is responsible for converting an individual item from the dataset
+    into the format required for the model's input. It should have the following signature::
+        
+        retriever (item: Any, is_last: bool) -> List[Dict] or Tuple[List[Dict], ...]
+
+    The `item` is an instance from the dataset named `dataset_name`. `is_last` is a boolean 
+    flag indicating whether the item is the last one in the context. The return value should
+    be a huggingface conversation-like object, i.e., a list of dict, or a tuple containing it.
+    
+    Args:
+        dataset_name (str): 
+            The name of the dataset for which the retriever function is being registered.
+            It must be a non-empty string.
+
+    """
+    def decorator(retriever: Callable[[Any, bool], Any]):
+        if not callable(retriever):
+            raise TypeError(f"{retriever.__name__} must be callable.")
+        
+        sig = inspect.signature(retriever)
+        params = list(sig.parameters.values())
+        if len(params) != 2:
+            raise TypeError(f"{retriever.__name__} must accept two arguments: an item and a boolean flag.")
+
+        DATASET_RETRIEVER_MAPPING[dataset_name] = retriever
+
+        @wraps(retriever)
+        def wrapper(*args, **kwargs):
+            return retriever(*args, **kwargs)
+        return wrapper
+    
+    return decorator
+
+
+def register_postprocess(dataset_name: str):
+    """
+    Registers a post-processing function for a given dataset.
+
+    The post-process function modifies the model's output, typically by applying 
+    text normalization techniques. The function should accept a string (or list of strings) 
+    and return a processed string. It should have the following signature::
+    
+        postprocess(text: Union[str, List[str]]) -> Union[str, List[str]]
+
+    Args:
+        dataset_name (str): 
+            The name of the dataset for which the post-process function is being registered.
+            It must be a non-empty string.
+
+    """
+    def decorator(postprocess: Callable[[str], str]):
+        if not callable(postprocess):
+            raise TypeError(f"{postprocess.__name__} must be callable.")
+
+        sig = inspect.signature(postprocess)
+        params = list(sig.parameters.values())
+        if len(params) != 1:
+            raise TypeError(f"{postprocess.__name__} must accept a single string argument.")
+
+
+        POSTPROCESS_MAPPING[dataset_name] = postprocess
+
+        @wraps(postprocess)
+        def wrapper(*args, **kwargs):
+            return postprocess(*args, **kwargs)
+        return wrapper
+    
+    return decorator
+
 def prepare_input(
     dataset_sources: Union[str, List[str]],
     batch: List[List[Dict[str, Any]]],
     instruction: Optional[str] = None,
-) -> List[List[Any]]:
+) -> Union[List[List[Any]], Tuple[List[List[Any]], ...]]:
     """
     Prepares a batch of data by using dataset-specific retriever functions based on the source of the data.
     If a dataset source is provided, the corresponding retriever function for that dataset will be used to process
     the items in the batch. If no dataset source is provided, the function will raise an error.
 
     Args:
-        dataset_sources (`Union[str, List[str]]`):
+        dataset_sources (str or List[str]):
             A string or a list of strings representing the dataset source for each context in the batch.
             If a single string is provided, all contexts are assumed to come from that dataset. If a list is
             provided, its length must match the number of contexts in the batch. Each dataset-specific retriever function
             is called accordingly for each item in the context.
-        batch (`List[List[Dict[str, Any]]]`):
+        batch (List[List[Dict[str, Any]]]):
             A batch of data where each element is a list of dictionaries, representing a context.
-        instruction (`Optional[str]`, *optional*):
+        instruction (str, *optional*):
             A string instruction to prepend to each context, typically used to guide the task
             or provide a hint. Defaults to `None`.
 
     Returns:
         `List[List[Any]]`: A batch of processed data where each context has been formatted using
         the dataset-specific retriever functions, and optionally prepended with an instruction.
+        If retriever returns more than one results, this method will return in those results in List[List[Any]] as well.
     """
     if isinstance(dataset_sources, str):
         dataset_sources = [dataset_sources] * len(batch)
@@ -77,10 +149,10 @@ def prepare_input(
     if len(set(return_annotations)) > 1:
         raise ValueError("All dataset retrievers must return the same type.")
 
-    batch_context, batch_additional_outputs = [], []
+    batch_context, batch_extra_outputs = [], []
 
     for source, context in zip(dataset_sources, batch):
-        messages, additional_outputs = [], []
+        messages, extra_outputs = [], []
         if instruction is not None:
             messages.append({"role": "instruction", "content": instruction})
 
@@ -91,36 +163,34 @@ def prepare_input(
             if isinstance(prepared_item, tuple):
                 msg, *rest = prepared_item
                 messages.extend(msg)
-                additional_outputs.append(tuple(rest))
+                extra_outputs.append(tuple(rest))
             else:
                 messages.extend(prepared_item)
 
         batch_context.append(messages)
-        batch_additional_outputs.append(additional_outputs)
+        batch_extra_outputs.append(extra_outputs)
 
-    if batch_additional_outputs[0] and all(
-        isinstance(output, tuple) for output in batch_additional_outputs[0]
+    if batch_extra_outputs[0] and all(
+        isinstance(output, tuple) for output in batch_extra_outputs[0]
     ):
         if (
             len(
                 set(
-                    len(output)
-                    for outputs in batch_additional_outputs
-                    for output in outputs
+                    len(output) for outputs in batch_extra_outputs for output in outputs
                 )
             )
             != 1
         ):
             raise RuntimeError(
-                "Inconsistent number of additional outputs across different contexts."
+                "Inconsistent number of extra outputs across different contexts."
             )
 
         return batch_context, *[
             list(outputs)
             for outputs in zip(
                 *[
-                    [list(i) for i in zip(*additional_outputs)]
-                    for additional_outputs in batch_additional_outputs
+                    [list(i) for i in zip(*extra_outputs)]
+                    for extra_outputs in batch_extra_outputs
                 ]
             )
         ]
@@ -141,7 +211,7 @@ def postprocess_generation(
 
 
     Args:
-        dataset (`str`, *optional*):
+        dataset (str, *optional*):
             The name of the dataset to apply dataset-specific postprocessing.
         predictions (`Union[str, List[str]]`):
             The generated predictions, either as a single string or a list of strings.
@@ -199,11 +269,11 @@ def prepare_dataloader(
     Args:
         datasets (`Dataset` or `List[Dataset]`):
             A `Dataset` object or list of datasets to load data from.
-        batch_size (`int`):
+        batch_size (int):
             Number of sub-lists (each with `num_shots + 1` items) per batch.
-        num_shots (`int`, *optional*):
+        num_shots (int, *optional*):
             Total number of in-context examples per sub-list. It can be None if `num_per_dataset` is specified.
-        num_per_dataset (`int` or `List[int]`, *optional*):
+        num_per_dataset (int or `List[int]`, *optional*):
             Number of items to sample from each dataset, whose sum should be equal `to num_shots` + 1.
             It can be `None` if only one dataset is provided.
         collate_fn (`Callable`, *optional*):
@@ -256,25 +326,25 @@ def prepare_dataloader(
         else:
             raise ValueError(
                 f"Unable to get correct index from sampler {sampler}, "
-                f"it should yield an `int` or `list` of `int` of length {minibatch_size}."
+                f"it should yield an int or list of int of length {minibatch_size}."
             )
 
     def collate_fn_wrapper(batch):
         batch_list = [
-            batch[i * (num_shots + 1) : (i + 1) * (num_shots + 1)]
+            batch[i * (num_shots + 1) : (i + 1) * (num_shots + 1)]  # type: ignore[operator]
             for i in range(batch_size)
-            if i * (num_shots + 1) < len(batch)
+            if i * (num_shots + 1) < len(batch)  # type: ignore[operator]
         ]
         if collate_fn:
             return collate_fn(batch_list)
         return batch_list
 
-    def check_consistent(name, obj, default_value):
+    def check_consistent(name, obj, default_value) -> List[Any]:
         old_value = obj
         if obj is None:
             obj = default_value
         if isinstance(obj, list):
-            if len(obj) != len(datasets):
+            if isinstance(datasets, Sized) and len(obj) != len(datasets):
                 raise ValueError(
                     f"{name} should be a list of the same length as datasets, got {old_value}."
                 )
@@ -308,12 +378,12 @@ def prepare_dataloader(
         batchilize_sampler(dataset, sampler, minibatch_size)
         for dataset, sampler, minibatch_size in zip(datasets, samplers, num_per_dataset)
     ]
-    concat_dataset = ConcatDataset(datasets)
+    concat_dataset: ConcatDataset = ConcatDataset(datasets)
     concat_sampler = ConcatSampler(samplers, concat_dataset.cumulative_sizes)
 
     return DataLoader(
         concat_dataset,
         collate_fn=collate_fn_wrapper,
-        batch_sampler=MultiBatchSampler(concat_sampler, batch_size, drop_last),
+        batch_sampler=MultiBatchSampler(concat_sampler, batch_size, drop_last),  # type: ignore[arg-type]
         **kwargs,
     )

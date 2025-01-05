@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Dict, List
 import datasets
 
 from testbed.data.common import split_generators, most_common_from_dict
@@ -128,7 +129,7 @@ class VQAv2(datasets.GeneratorBasedBuilder):
         if annotations_path is not None:
             dataset = json.load(open(annotations_path, "r"))
 
-            qa = {ann["question_id"]: [] for ann in dataset["annotations"]}
+            qa: Dict[str, List] = {ann["question_id"]: [] for ann in dataset["annotations"]}
             for ann in dataset["annotations"]:
                 qa[ann["question_id"]] = ann
 

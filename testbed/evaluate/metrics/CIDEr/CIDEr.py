@@ -30,8 +30,8 @@ where:
 
 _KWARGS_DESCRIPTION = """
 Args:
-    predictions (`list` of `str`): Predicted captions.
-    references (`list` of `str` lists): Ground truth captions. 
+    predictions (list of str): Predicted captions.
+    references (list of str lists): Ground truth captions. 
     n (int, defaults to 4): Number of ngrams for which (ngram) representation is calculated.
     sigma (float, defaults to 6.0): The standard deviation parameter for gaussian penalty.
 
@@ -98,11 +98,11 @@ def tokenize(tokenizer_path: str, predictions: List[str], references: List[List[
 
     cmd.append(f.name)
     p_tokenizer = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    token_lines = p_tokenizer.communicate(input=sentences.rstrip())[0]
-    token_lines = token_lines.decode()
+    token_lines = p_tokenizer.communicate(input=sentences.rstrip().encode())[0]
+    token_lines_str = token_lines.decode()
     lines = [
         " ".join([w for w in line.rstrip().split(" ") if w not in PUNCTUATIONS])
-        for line in token_lines.split("\n")
+        for line in token_lines_str.split("\n")
     ]
 
     os.remove(f.name)

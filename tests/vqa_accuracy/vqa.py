@@ -19,6 +19,7 @@ __version__ = "0.9"
 import json
 import datetime
 import copy
+from typing import Dict, List
 
 
 class VQA:
@@ -47,9 +48,15 @@ class VQA:
     def createIndex(self):
         # create index
         print("creating index...")
-        imgToQA = {ann["image_id"]: [] for ann in self.dataset["annotations"]}
-        qa = {ann["question_id"]: [] for ann in self.dataset["annotations"]}
-        qqa = {ann["question_id"]: [] for ann in self.dataset["annotations"]}
+        imgToQA: Dict[str, List] = {
+            ann["image_id"]: [] for ann in self.dataset["annotations"]
+        }
+        qa: Dict[str, List] = {
+            ann["question_id"]: [] for ann in self.dataset["annotations"]
+        }
+        qqa: Dict[str, List] = {
+            ann["question_id"]: [] for ann in self.dataset["annotations"]
+        }
         for ann in self.dataset["annotations"]:
             imgToQA[ann["image_id"]] += [ann]
             qa[ann["question_id"]] = ann
@@ -197,7 +204,8 @@ class VQA:
             ann["question_type"] = qaAnn["question_type"]
             ann["answer_type"] = qaAnn["answer_type"]
         print(
-            "DONE (t=%0.2fs)" % ((datetime.datetime.now(datetime.timezone.utc) - time_t).total_seconds())
+            "DONE (t=%0.2fs)"
+            % ((datetime.datetime.now(datetime.timezone.utc) - time_t).total_seconds())
         )
 
         res.dataset["annotations"] = anns

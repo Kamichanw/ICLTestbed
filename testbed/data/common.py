@@ -1,52 +1,10 @@
 from pathlib import Path
-from typing import Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union
 import warnings
 import datasets
 
-DATASET_RETRIEVER_MAPPING = {}
-POSTPROCESS_MAPPING = {}
-
-
-def register_dataset_retriever(dataset_name, retriever):
-    """
-    Registers a dataset retriever function for a given dataset.
-
-    The retriever function is responsible for converting an individual item from the dataset
-    into the format required for the model's input. The retriever function takes
-    two arguments: an item from the dataset and a boolean flag indicating whether the item
-    is the last one in the context.
-
-    Args:
-        dataset_name (str):
-            The name of the dataset for which the retriever function is being registered.
-            It must be a non-empty string.
-        retriever (Callable[[Any, bool], Any]):
-            A callable function that processes each dataset item. It transforms an item into
-            the format needed for the model. The boolean flag indicates if the item is the
-            last in the current context.
-    """
-    DATASET_RETRIEVER_MAPPING[dataset_name] = retriever
-
-
-def register_postprocess(dataset_name: str, postprocess: Callable[[str], str]):
-    """
-    Registers a post-process generation function for a given dataset.
-
-    postprocess process model generation by applying text normalization techniques.
-    It processes a single prediction or a list of predictions, allowing for optional truncation
-    based on stop words.
-
-    Args:
-        dataset_name (str):
-            The name of the dataset for which the retriever function is being registered.
-            It must be a non-empty string.
-        postprocess (Callable:
-            The user defined process function to be registered. The function should have the following signature::
-
-                postprocess(predictions: str) -> str
-    """
-    POSTPROCESS_MAPPING[dataset_name] = postprocess
-
+DATASET_RETRIEVER_MAPPING: Dict[str, Callable] = {}
+POSTPROCESS_MAPPING: Dict[str, Callable] = {}
 
 def most_common_from_dict(dct):
     lst = [x["answer"] for x in dct]
@@ -55,7 +13,7 @@ def most_common_from_dict(dct):
 
 def split_generators(
     expand_path_fn: Callable[[str, str], Path],
-    type_split_file_dict: Dict[str, Dict[str, Union[str, List[str]]]],
+    type_split_file_dict: Dict[str, Any],
     verbose: bool = True,
 ):
     """
@@ -67,7 +25,7 @@ def split_generators(
         expand_path_fn (`Callable[[str, str], Union[Path, List[Path]]]`): 
             A method requires `file_type` and `split_name` as input and returns a `pathlib.Path` object \
             or a list of `pathlib.Path` object pointing to the full path of `file_type` (e.g. questions, annotations and images).
-        type_split_file_dict (`Dict[str, Dict[str, Union[str, List[str]]]]`):
+        type_split_file_dict (`Dict[str, Dict[str, str]]` or `Dict[str, Dict[str, List[str]]]`):
             A multi dict that contains file type -> split name -> file name(s).
         verbose (`bool`, defaults to `True`):
             Whether to warn if a split files are not exist.
@@ -99,8 +57,8 @@ def split_generators(
     for split_name, dct in data_path.items():
         for path in dct.values():
             if not isinstance(path, list):
-                path = [path]
-            for p in path:
+                path = [path]  # type: ignore[assignment]
+            for p in path:  # type: ignore[attr-defined]
                 if not p.exists():
                     missing_files.append(str(p))
                     if split_name in splits:

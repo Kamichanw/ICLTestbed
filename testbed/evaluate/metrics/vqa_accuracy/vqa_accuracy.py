@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 import datasets
 import evaluate
 import re
@@ -11,10 +12,10 @@ Where `ans` is answered by machine. In order to be consistent with 'human accura
 
 _KWARGS_DESCRIPTION = """
 Args:
-    predictions (`list` of `str`): Predicted answers.
-    references (`list` of `str` lists): Ground truth answers. 
-    answer_types (`list` of `str`, *optional*): Answer types corresponding to each questions.
-    questions_type (`list` of `str`, *optional*): Question types corresponding to each questions.
+    predictions (list of str): Predicted answers.
+    references (list of str lists): Ground truth answers. 
+    answer_types (list of str, *optional*): Answer types corresponding to each questions.
+    questions_type (list of str, *optional*): Question types corresponding to each questions.
 
 Returns:
     visual question answering accuracy (`float`): Accuracy accuracy. Minimum possible value is 0. Maximum possible value is 100.
@@ -221,8 +222,7 @@ def processDigitArticle(inText):
     for wordId, word in enumerate(outText):
         if word in contractions:
             outText[wordId] = contractions[word]
-    outText = " ".join(outText)
-    return outText
+    return " ".join(outText)
 
 
 @evaluate.utils.file_utils.add_start_docstrings(_DESCRIPTION, _KWARGS_DESCRIPTION)
@@ -260,7 +260,9 @@ class VQAAccuracy(evaluate.Metric):
                 "The length of predictions, answer_types and question_types doesn't match."
             )
 
-        total, ans_type_dict, ques_type_dict = [], {}, {}
+        total = []
+        ans_type_dict: Dict[str, List] = {}
+        ques_type_dict: Dict[str, List] = {}
 
         for pred, gts, ans_type, ques_type in zip(
             predictions, references, answer_types, question_types
@@ -291,7 +293,7 @@ class VQAAccuracy(evaluate.Metric):
                 ques_type_dict[ques_type].append(vqa_acc)
 
         # the following key names follow the naming of the official evaluation results
-        result = {"overall": 100 * sum(total) / len(total)}
+        result: Dict[str, Any] = {"overall": 100 * sum(total) / len(total)}
 
         if len(ans_type_dict) > 0:
             result["perAnswerType"] = {

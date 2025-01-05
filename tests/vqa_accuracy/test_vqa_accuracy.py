@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.getcwd())
 
-from testbed.data import vqav2
+from testbed.data import postprocess_generation
 from vqa import VQA
 from vqaEval import VQAEval
 
@@ -42,7 +42,7 @@ def custom_evaluate(questions_path, annotations_path, result_path, precision):
         gt = vqa.qa[quesId]
         res = vqaRes.qa[quesId]
 
-        prediction = vqav2.postprocess_generation(res["answer"])
+        prediction = postprocess_generation("vqav2", res["answer"])
 
         predictions.append(prediction)
         references.append([item["answer"] for item in gt["answers"]])

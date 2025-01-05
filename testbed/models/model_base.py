@@ -1,9 +1,13 @@
-from abc import ABC, abstractmethod
-from functools import lru_cache, partial
+from abc import ABC
+from collections import OrderedDict
+from functools import partial
+from PIL.Image import Image
 import inspect
+import os
 import re
 from types import MethodType
 from typing import Any, Callable, Dict, List, Optional, Union, overload
+import warnings
 
 import torch
 from torch.utils.hooks import RemovableHandle
@@ -16,9 +20,10 @@ from ..utils import try_inject_params
 class ModelBase(nn.Module, ABC):
     def __init__(
         self,
-        model_root,
-        processor_class,
-        model_class,
+        model_root: str,
+        processor_class: type,
+        model_class: type,
+        support_models: Optional[List[str]] = None,
         processor_args=None,
         model_args=None,
         **common_args,
@@ -31,7 +36,7 @@ class ModelBase(nn.Module, ABC):
         def instantiate(cls: type, **kwargs):
             is_auto_cls = cls.__name__.startswith("Auto")
             trust_remote_code = kwargs.pop("trust_remote_code", is_auto_cls)
-            return cls.from_pretrained(
+            return cls.from_pretrained(  # type: ignore[attr-defined]
                 model_root, trust_remote_code=trust_remote_code, **kwargs
             )
 
@@ -40,39 +45,46 @@ class ModelBase(nn.Module, ABC):
         )
         self.model = instantiate(model_class, **{**model_args, **common_args})
 
-        if not hasattr(self, "_model_name"):
-            self._model_name = None
+        self.model_name = os.path.basename(model_root)
+        if support_models is not None and self.model_name not in support_models:
+            warnings.warn(
+                "The model name cannot be detected automatically in `model_root`, which may lead to unexpected behaviors. "
+                f"make sure basename of model root is in {', '.join(self._support_models)}."
+            )
 
         self.config = self.model.config
         self.prompt_template = None
+        self._trackers_dict: OrderedDict = OrderedDict()
+
+        def tracker_hook(m, args):
+            for tracker in self._trackers_dict.values():
+                tracker.incre_next_index()
+
+        self.model.register_forward_pre_hook(tracker_hook, prepend=True)
 
     def _register_hook(self, register_fn_name, module_name, hook, **kwargs):
-        @lru_cache
-        def module_dict():
-            return {k: v for k, v in self.model.named_modules()}
-
         if isinstance(module_name, str):
             # Use regex to match module names
             return [
                 getattr(module, register_fn_name)(
                     try_inject_params(hook, module_name=name), **kwargs
                 )
-                for name, module in module_dict().items()
+                for name, module in self.model.named_modules()
                 if re.search(module_name, name)
             ]
 
-        elif isinstance(module_name, list) and isinstance(module_name[0], str):
+        elif isinstance(module_name, list):
             # Exact match for each module name in the list
             return [
-                getattr(module_dict()[name], register_fn_name)(
+                getattr(module, register_fn_name)(
                     try_inject_params(hook, module_name=name), **kwargs
                 )
-                for name in module_name
-                if name in module_dict()
+                for name, module in self.model.named_modules()
+                if name in module_name
             ]
         else:
             raise TypeError(
-                f"module_name should be str or list of str, but got {type(module_name)}"
+                f"module_name should be str or list of str, but got {type(module_name).__name__}"
             )
 
     def add_tracker(self, module_name: Union[str, List[str]], tracker: TrackerBase):
@@ -104,13 +116,15 @@ class ModelBase(nn.Module, ABC):
         if not matched_modules:
             raise ValueError(f"No modules found matching {module_name}")
 
-        tracker.track(list(matched_modules.values()))
+        tracker.track(list(matched_modules.values()), self._trackers_dict)
+        tracker.auto_incre_index = False
+        self._trackers_dict[tracker.id] = tracker
         for name, status in zip(
             matched_modules.keys(), tracker._module_refs_dict.values()
         ):
             status.module_name = name
 
-    @overload
+    @overload  # type: ignore
     def register_forward_hook(
         self,
         module_name: Union[str, List[str]],
@@ -138,7 +152,7 @@ class ModelBase(nn.Module, ABC):
         """
         ...
 
-    @overload
+    @overload  # type: ignore
     def register_foward_hook(
         self,
         hook: Callable,
@@ -152,12 +166,12 @@ class ModelBase(nn.Module, ABC):
         """
         ...
 
-    def register_forward_hook(
+    def register_forward_hook(  # type: ignore
         self,
         *args,
-        prepend: bool = False,
-        with_kwargs: bool = False,
-        always_call: bool = False,
+        prepend=False,
+        with_kwargs=False,
+        always_call=False,
     ):
         if callable(args[0]):
             return super().register_forward_hook(
@@ -208,9 +222,7 @@ class ModelBase(nn.Module, ABC):
         """
         ...
 
-    def register_forward_pre_hook(
-        self, *args, prepend: bool = False, with_kwargs: bool = False
-    ):
+    def register_forward_pre_hook(self, *args, prepend=False, with_kwargs=False):
         if callable(args[0]):
             return super().register_forward_pre_hook(
                 *args, prepend=prepend, with_kwargs=with_kwargs
@@ -228,7 +240,6 @@ class ModelBase(nn.Module, ABC):
         self,
         module_name: Union[str, List[str]],
         hook: Callable,
-        *,
         prepend: bool = False,
     ) -> Union[RemovableHandle, List[RemovableHandle]]:
         """
@@ -251,20 +262,16 @@ class ModelBase(nn.Module, ABC):
 
     @overload
     def register_full_backward_hook(
-        self, hook: Callable, *, prepend: bool = False
+        self, hook: Callable, prepend: bool = False
     ) -> RemovableHandle:
         """
         Register a full_backward hook on this model, same as standard one.
         """
         ...
 
-    def register_full_backward_hook(
-        self,
-        *args,
-        prepend: bool = False,
-    ):
+    def register_full_backward_hook(self, *args, prepend=False):
         if callable(args[0]):
-            return super().register_full_backward_hook(*args, prepend=prepend)
+            return super().register_full_backward_hook(args[0], prepend=prepend)
         elif len(args) >= 2 and callable(args[1]):
             return self._register_hook(
                 "register_full_backward_hook", *args, prepend=prepend
@@ -275,7 +282,6 @@ class ModelBase(nn.Module, ABC):
         self,
         module_name: Union[str, List[str]],
         hook: Callable,
-        *,
         prepend: bool = False,
     ) -> Union[RemovableHandle, List[RemovableHandle]]:
         """
@@ -300,7 +306,6 @@ class ModelBase(nn.Module, ABC):
     def register_full_backward_pre_hook(
         self,
         hook: Callable,
-        *,
         prepend: bool = False,
     ) -> RemovableHandle:
         """
@@ -308,49 +313,78 @@ class ModelBase(nn.Module, ABC):
         """
         ...
 
-    def register_full_backward_pre_hook(self, *args, prepend: bool = False):
+    def register_full_backward_pre_hook(self, *args, prepend=False):
         if callable(args[0]):
-            return super().register_full_backward_pre_hook(*args, prepend=prepend)
+            return super().register_full_backward_pre_hook(args[0], prepend=prepend)
         elif len(args) >= 2 and callable(args[1]):
             return self._register_hook(
                 "register_full_backward_pre_hook", *args, prepend=prepend
             )
 
     @property
-    @abstractmethod
     def default_prompt_template(self) -> str:
         if hasattr(self.processor, "get_chat_template"):
             return self.processor.get_chat_template()
         if hasattr(self.processor.tokenizer, "get_chat_template"):
             return self.processor.tokenizer.get_chat_template()
-        raise NotImplementedError()
-
-    @property
-    def model_name(self) -> str:
-        if self._model_name:
-            return self._model_name
-        raise NotImplementedError()
+        else:
+            raise RuntimeError("No default prompt template found.")
 
     @property
     def device(self):
         return self.model.device
 
-    @abstractmethod
-    def process_input(self, *args, **kwargs):
+    def process_input(
+        self,
+        images: Union[List[Image], List[List[Image]]],
+        text: Union[
+            List[Union[str, Dict[str, Any]]], List[List[Union[str, Dict[str, Any]]]]
+        ],
+        prompt_template: Optional[str] = None,
+        **kwargs,
+    ):
         """
-        This function will convert the input (which should be `List[Dict[str, str]]` or `List[str]` for unbatched and
-        `List[List[Dict[str, str]]]` or `List[List[str]]` for batched) into the input of models.
+        Processes text and image inputs for the model.
 
-        It can be regarded as a composition of `apply_prompt_template` and `processor.__call__`.
-        If input is string, `apply_prompt_template` will not be used.
+        Args:
+            images (Union[List[Image], List[List[Image]]]):
+                A list of images or a list of lists of images. For unbatched input, this should be a single-level list
+                of images. For batched input, this should be a nested list where each inner list represents a batch of images.
+                Each image should be an instance of the `Image` class.
+
+            text (Union[List[Union[str, Dict[str, Any]]], List[List[Union[str, Dict[str, Any]]]]]):
+                A list of texts or a list of lists of texts. For unbatched input, this should be a single-level list
+                where each item is either a string or a dictionary. For batched input, this should be a nested list
+                (list of lists) where each inner list represents a batch of texts. Dictionaries can follow the
+                transformers' conversation format, with keys like "role" and "content".
+
+            prompt_template (str, optional):
+                A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+
+            **kwargs:
+                Additional keyword arguments passed to the `processor`.
+
+        Returns:
+            The output of the `processor` function, which is the processed input ready for the model.
         """
-        raise NotImplementedError()
+        if isinstance(text[0], dict) or (
+            isinstance(text[0], list) and isinstance(text[0][0], dict)
+        ):
+            text = self.apply_prompt_template(text, prompt_template=prompt_template)  # type: ignore[arg-type]
+
+        return self.processor(
+            images=images,
+            text=text,
+            padding=kwargs.pop("padding", True),
+            return_tensors=kwargs.pop("return_tensors", "pt"),
+            **kwargs,
+        )
 
     @torch.no_grad()
     def generate(
         self,
         *inputs,
-        processor_args: Dict[str, Any] = None,
+        processor_args: Optional[Dict[str, Any]] = None,
         return_inputs: bool = False,
         return_generated_ids: bool = False,
         **generate_args,
@@ -380,7 +414,7 @@ class ModelBase(nn.Module, ABC):
         processor_args = processor_args if processor_args else dict()
 
         inputs = self.process_input(*inputs, **processor_args).to(self.device)
-        seq_len = inputs.input_ids.shape[-1]
+        seq_len = inputs.input_ids.shape[-1]  # type: ignore[attr-defined]
 
         generated_ids = self.model.generate(**inputs, **generate_args)
         generated_ids = generated_ids[:, seq_len:]
@@ -399,7 +433,10 @@ class ModelBase(nn.Module, ABC):
         return result
 
     def forward(
-        self, *processor_input, processor_args: Dict[str, Any] = None, **kwargs
+        self,
+        *processor_input,
+        processor_args: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ):
         processor_args = processor_args if processor_args else dict()
         inputs = self.process_input(*processor_input, **processor_args).to(self.device)
@@ -407,7 +444,7 @@ class ModelBase(nn.Module, ABC):
 
     def apply_prompt_template(
         self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
+        conversation: Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]],
         prompt_template: Optional[str] = None,
         tokenize=False,
         **kwargs,
@@ -493,14 +530,14 @@ class ModelBase(nn.Module, ABC):
                 If the number of matched modules doesn't match the number of provided instances,
                 or if the new module's forward method has incompatible parameter names with the original module.
         """
-        pass
+        ...
 
     def replace_module(
         self,
-        module_name_or_type: Union[str, List[str], nn.Module],
-        new_module_cls_or_instances: Union[nn.Module, List[nn.Module]],
+        module_name_or_type,
+        new_module_cls_or_instances,
         *,
-        strict: bool = True,
+        strict=True,
         **init_args,
     ):
         """

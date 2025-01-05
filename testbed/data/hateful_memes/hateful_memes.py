@@ -72,7 +72,7 @@ class HatefulMemes(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         def expand_path(file_type, split_name):
-            basename = _SUB_FOLDER_OR_FILE_NAME[file_type][split_name]
+            basename = _SUB_FOLDER_OR_FILE_NAME[file_type][split_name]  # type: ignore[index]
             if isinstance(basename, list):
                 return [Path(self.config.data_dir) / name for name in basename]
             return Path(self.config.data_dir) / basename

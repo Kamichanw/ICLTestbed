@@ -8,11 +8,10 @@
 # are sometimes constant, e.g. christmas -> christmas which was incorrectly
 # singularized by our inflection.singularize.
 from functools import lru_cache
-import re
 import nltk
 from nltk.corpus.reader import VERB
 import inflection
-from testbed.data.common import register_dataset_retriever, register_postprocess
+from testbed.data import register_dataset_retriever, register_postprocess
 
 _MANUAL_MATCHES = {
     "police": "police",
@@ -207,18 +206,18 @@ class OKVQAStemmer:
         return " ".join(stemmed_words)
 
 
+@register_postprocess(__name__.split(".")[-1])
 def postprocess(pred):
     @lru_cache
     def stemmer():
         return OKVQAStemmer()
+
     return stemmer().stem(pred)
 
 
-register_postprocess(__name__.split(".")[-1], postprocess)
-
-register_dataset_retriever(
-    __name__.split(".")[-1],
-    lambda item, is_last: (
+@register_dataset_retriever(__name__.split(".")[-1])
+def dataset_retriever(item, is_last: bool):
+    return (
         [
             {"role": "image", "content": [{"type": "image"}]},
             {
@@ -230,10 +229,9 @@ register_dataset_retriever(
                 if is_last
                 else {
                     "role": "answer",
-                    "content": [{"type": "text", "text": item["answer"]}],
+                    "content": item["answer"],
                 }
             ),
         ],
         item["image"],
-    ),
-)
+    )

@@ -80,7 +80,7 @@ class Fingerprint:
                 A function that encodes the input sample into a feature.
                 The function accepts any type of input and must return a serializable object.
         """
-        self.hash_values = {}
+        self.hash_values: Dict[str, Any] = {}
         self.hash_method = "xxh3_64"
         self.encode_fn = encode_fn
 
@@ -149,10 +149,12 @@ class Fingerprint:
 
         for key, value in dct.items():
             if not isinstance(key, str):
-                raise TypeError(f"Expected key of type 'str', got {type(key).__name__}")
+                raise TypeError(
+                    f"Expected key of type 'str', but got {type(key).__name__}"
+                ).__name__
             if not isinstance(value, dict):
                 raise TypeError(
-                    f"Expected value of type 'dict' for key '{key}', got {type(value).__name__}"
+                    f"Expected value of type 'dict' for key '{key}', but got {type(value).__name__}"
                 )
             if set(value.keys()) != required_keys:
                 raise ValueError(

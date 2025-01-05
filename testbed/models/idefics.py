@@ -1,8 +1,5 @@
 from functools import partial
-import os
-import re
-from typing import Any, Dict, List, Union
-import warnings
+from typing import Any, Dict, List, Optional, Union
 import transformers
 from packaging import version
 from PIL.Image import Image
@@ -33,13 +30,6 @@ class Idefics(ModelBase):
             **common_args,
         )
 
-        self._model_name = os.path.basename(model_root).lower()
-        if not re.fullmatch(r"^idefics-\d+b[a-zA-Z-]*$", self._model_name):
-            warnings.warn(
-                "The model type cannot be detected automatically in `model_root`, which may lead to unexpected behaviors."
-            )
-            self._model_name = None
-
     @property
     def default_prompt_template(self):
         # see https://arxiv.org/pdf/2306.16527
@@ -49,7 +39,7 @@ class Idefics(ModelBase):
                 "Instruction: {{ messages[0]['content'] }}\n"
                 "{% set messages = messages[1:] %}"
             "{% endif %}"
-            "{% set last_role = messages[0]['role'] %}"
+            "{% set first_role = messages[0]['role'] %}"
             "{% for message in messages %}"
                 "{% if message['role'] != '' %}"
                     "{{ message['role'].capitalize() }}"
@@ -60,22 +50,26 @@ class Idefics(ModelBase):
                     "{% endif %}" 
                 "{% endif %}"
                 "{% if 'content' in message %}"
-                    "{% for line in message['content'] %}"
-                        "{% if line['type'] == 'text' %}"
-                            "{{ line['text'] }}"
-                        "{% elif line['type'] == 'image' %}"
-                            "{{- '<image>' }}"
-                        "{% endif %}"
-                        "{% if not loop.last %}"
+                    "{% if message['content'] is string %}"
+                        "{{ message['content'] }}\n"
+                    "{% else %}"
+                        "{% for line in message['content'] %}"
+                            "{% if line['type'] == 'text' %}"
+                                "{{ line['text'] }}"
+                            "{% elif line['type'] == 'image' %}"
+                                "{{- '<image>' }}"
+                            "{% endif %}"
+                            "{% if not loop.last %}"
+                                " "
+                            "{%+ endif %}"
+                        "{% endfor %}"
+                        "{% set is_end_of_round = loop.nextitem is not defined or loop.nextitem['role'] == first_role %}"
+                        "{% if is_end_of_round %}"
+                            "{{ '\n' }}"
+                        "{% else %}"
                             " "
                         "{%+ endif %}"
-                    "{% endfor %}"
-                    "{% set is_end_of_round = loop.nextitem is not defined or loop.nextitem['role'] == last_role %}"
-                    "{% if is_end_of_round %}"
-                        "\n\n"
-                    "{% else %}"
-                        " "
-                    "{%+ endif %}"
+                    "{% endif %}" 
                 "{% endif %}"
             "{% endfor %}"
         )
@@ -83,16 +77,16 @@ class Idefics(ModelBase):
 
     def process_input(
         self,
-        text: Union[str, List[Union[str, Dict[str, Any]]], List[List[Dict[str, Any]]]],
         images: Union[List[Image], List[List[Image]]],
-        prompt_template: str = None,
+        text: Union[List[Union[str, Dict[str, Any]]], List[List[Union[str, Dict[str, Any]]]]],
+        prompt_template: Optional[str] = None,
         **kwargs,
     ):
         """
         Processes text and image inputs for the model.
 
         Args:
-            text (str, List[Union[str, Dict[str, Any]]], List[List[Dict[str, Any]]]):
+            text (str, List[str], List[Dict[str, Any]], List[List[Dict[str, Any]]]):
                 A single string, a list of strings or dictionaries, or a nested list (batch) of strings/dictionaries.
                 For unbatched input (single text), this should be a string or a list of dict, where each item is
                 either a string or a doct (following the transformers' conversation format with
