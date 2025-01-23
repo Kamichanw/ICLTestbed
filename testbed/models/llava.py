@@ -82,8 +82,8 @@ class LLaVa(ModelBase):
         elif self.model_name in HF_LLAVA["llava-interleave"]:
             # fmt: off
             return (
-                "{% if messages[0]['role'] == 'instruction' %}"
-                    "{{ '<|im_start|> instruction\n' + messages[0]['content'] + '<|im_end|>\n' }}"
+                "{% if messages[0]['role'].lower() in ['instruction', 'system'] %}"
+                    "{{ '<|im_start|>' + messages[0]['role'] + '\n' + messages[0]['content'] + '<|im_end|>\n' }}"
                     "{% set messages = messages[1:] %}"
                 "{% endif %}"
                 "{% for message in messages %}"
@@ -158,9 +158,13 @@ class LLaVa(ModelBase):
             isinstance(text[0], list) and isinstance(text[0][0], dict)
         ):
             text = self.apply_prompt_template(text, prompt_template=prompt_template)  # type: ignore[arg-type]
+        
+        if isinstance(images[0], list):
+            # llava doesn't support images with type List[List[Image]]
+            images = list(itertools.chain(*images))
 
         return self.processor(
-            images=list(itertools.chain(*images)), # llava doesn't support images with type List[List[Image]]
+            images=images,
             text=text,
             padding=kwargs.pop("padding", True),
             return_tensors=kwargs.pop("return_tensors", "pt"),

@@ -34,8 +34,8 @@ class Mistral(ModelBase):
     def default_prompt_template(self):
         # fmt: off
         return (
-            "{% if messages[0]['role'] == 'instruction' %}"
-                "Instruction: {{ messages[0]['content'] }}\n"
+            "{% if messages[0]['role'].lower() in ['instruction', 'system'] %}"
+                "{{ messages[0]['role'].capitalize() + '\n' + messages[0]['content'] + '\n'}}"
                 "{% set messages = messages[1:] %}"
             "{% endif %}"
             "{% for message in messages %}"

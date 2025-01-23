@@ -35,8 +35,8 @@ class Idefics(ModelBase):
         # see https://arxiv.org/pdf/2306.16527
         # fmt: off
         return (
-            "{% if messages[0]['role'] == 'instruction' %}"
-                "Instruction: {{ messages[0]['content'] }}\n"
+            "{% if messages[0]['role'].lower() in ['instruction', 'system'] %}"
+                "{{ messages[0]['role'].capitalize() + '\n' + messages[0]['content'] + '\n'}}"
                 "{% set messages = messages[1:] %}"
             "{% endif %}"
             "{% set first_role = messages[0]['role'] %}"
