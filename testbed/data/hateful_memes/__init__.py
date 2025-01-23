@@ -1,5 +1,5 @@
 import nltk
-from testbed.data import register_postprocess, register_dataset_retriever
+from testbed.data.common import register_postprocess, register_dataset_retriever
 
 
 @register_dataset_retriever(__name__.split(".")[-1])

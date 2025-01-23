@@ -1,5 +1,5 @@
 from typing import List, Union
-from testbed.data import register_dataset_retriever, register_postprocess
+from testbed.data.common import register_dataset_retriever, register_postprocess
 
 
 @register_dataset_retriever(__name__.split(".")[-1])

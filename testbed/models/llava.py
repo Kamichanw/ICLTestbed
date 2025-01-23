@@ -1,4 +1,7 @@
 from functools import lru_cache
+import itertools
+from typing import Any, Dict, List, Optional, Union
+from PIL.Image import Image
 import warnings
 from transformers import (
     LlavaForConditionalGeneration,
@@ -117,3 +120,49 @@ class LLaVa(ModelBase):
                 "or load from official llava model to use the default prompt template."
             )
             return super().default_prompt_template
+
+    def process_input(
+        self,
+        images: Union[List[Image], List[List[Image]]],
+        text: Union[
+            List[Union[str, Dict[str, Any]]], List[List[Union[str, Dict[str, Any]]]]
+        ],
+        prompt_template: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        Processes text and image inputs for the model.
+
+        Args:
+            images (Union[List[Image], List[List[Image]]]):
+                A list of images or a list of lists of images. For unbatched input, this should be a single-level list
+                of images. For batched input, this should be a nested list where each inner list represents a batch of images.
+                Each image should be an instance of the `Image` class.
+
+            text (Union[List[Union[str, Dict[str, Any]]], List[List[Union[str, Dict[str, Any]]]]]):
+                A list of texts or a list of lists of texts. For unbatched input, this should be a single-level list
+                where each item is either a string or a dictionary. For batched input, this should be a nested list
+                (list of lists) where each inner list represents a batch of texts. Dictionaries can follow the
+                transformers' conversation format, with keys like "role" and "content".
+
+            prompt_template (str, optional):
+                A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+
+            **kwargs:
+                Additional keyword arguments passed to the `processor`.
+
+        Returns:
+            The output of the `processor` function, which is the processed input ready for the model.
+        """
+        if isinstance(text[0], dict) or (
+            isinstance(text[0], list) and isinstance(text[0][0], dict)
+        ):
+            text = self.apply_prompt_template(text, prompt_template=prompt_template)  # type: ignore[arg-type]
+
+        return self.processor(
+            images=list(itertools.chain(*images)), # llava doesn't support images with type List[List[Image]]
+            text=text,
+            padding=kwargs.pop("padding", True),
+            return_tensors=kwargs.pop("return_tensors", "pt"),
+            **kwargs,
+        )

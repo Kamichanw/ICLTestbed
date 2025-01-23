@@ -17,6 +17,8 @@ from .sampler import MultiBatchSampler, ConcatSampler
 from .common import (
     POSTPROCESS_MAPPING,
     DATASET_RETRIEVER_MAPPING,
+    register_dataset_retriever,
+    register_postprocess,
 )
 
 # auto import dataset package
@@ -27,79 +29,6 @@ for module_name in os.listdir(os.path.dirname(__file__)):
     ):
         importlib.import_module(f".{module_name}", package=__name__)
 
-
-def register_dataset_retriever(dataset_name: str):
-    """
-    Registers a dataset retriever function for a given dataset.
-
-    The retriever function is responsible for converting an individual item from the dataset
-    into the format required for the model's input. It should have the following signature::
-        
-        retriever (item: Any, is_last: bool) -> List[Dict] or Tuple[List[Dict], ...]
-
-    The `item` is an instance from the dataset named `dataset_name`. `is_last` is a boolean 
-    flag indicating whether the item is the last one in the context. The return value should
-    be a huggingface conversation-like object, i.e., a list of dict, or a tuple containing it.
-    
-    Args:
-        dataset_name (str): 
-            The name of the dataset for which the retriever function is being registered.
-            It must be a non-empty string.
-
-    """
-    def decorator(retriever: Callable[[Any, bool], Any]):
-        if not callable(retriever):
-            raise TypeError(f"{retriever.__name__} must be callable.")
-        
-        sig = inspect.signature(retriever)
-        params = list(sig.parameters.values())
-        if len(params) != 2:
-            raise TypeError(f"{retriever.__name__} must accept two arguments: an item and a boolean flag.")
-
-        DATASET_RETRIEVER_MAPPING[dataset_name] = retriever
-
-        @wraps(retriever)
-        def wrapper(*args, **kwargs):
-            return retriever(*args, **kwargs)
-        return wrapper
-    
-    return decorator
-
-
-def register_postprocess(dataset_name: str):
-    """
-    Registers a post-processing function for a given dataset.
-
-    The post-process function modifies the model's output, typically by applying 
-    text normalization techniques. The function should accept a string (or list of strings) 
-    and return a processed string. It should have the following signature::
-    
-        postprocess(text: Union[str, List[str]]) -> Union[str, List[str]]
-
-    Args:
-        dataset_name (str): 
-            The name of the dataset for which the post-process function is being registered.
-            It must be a non-empty string.
-
-    """
-    def decorator(postprocess: Callable[[str], str]):
-        if not callable(postprocess):
-            raise TypeError(f"{postprocess.__name__} must be callable.")
-
-        sig = inspect.signature(postprocess)
-        params = list(sig.parameters.values())
-        if len(params) != 1:
-            raise TypeError(f"{postprocess.__name__} must accept a single string argument.")
-
-
-        POSTPROCESS_MAPPING[dataset_name] = postprocess
-
-        @wraps(postprocess)
-        def wrapper(*args, **kwargs):
-            return postprocess(*args, **kwargs)
-        return wrapper
-    
-    return decorator
 
 def prepare_input(
     dataset_sources: Union[str, List[str]],

@@ -11,7 +11,7 @@ from functools import lru_cache
 import nltk
 from nltk.corpus.reader import VERB
 import inflection
-from testbed.data import register_dataset_retriever, register_postprocess
+from testbed.data.common import register_dataset_retriever, register_postprocess
 
 _MANUAL_MATCHES = {
     "police": "police",
