@@ -20,11 +20,7 @@ class Idefics2(ModelBase):
     ):
 
         processor_args = (
-            processor_args
-            if processor_args
-            else dict(
-                chat_template=self.default_prompt_template, do_image_splitting=False
-            )
+            processor_args if processor_args else dict(do_image_splitting=False)
         )
 
         super().__init__(
@@ -85,5 +81,5 @@ class Idefics2(ModelBase):
         if self.model_name == "idefics2-8b-base":
             # base model doesn't have <end_of_utterance> token
             return template.replace("<end_of_utterance>", "")
-        
+
         return template
