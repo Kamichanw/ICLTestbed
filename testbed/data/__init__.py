@@ -160,7 +160,9 @@ def postprocess_generation(
 
     def preprocess(pred, stop_words):
         if stop_words is not None:
-            pred = re.split("|".join(stop_words), pred, 1)[0]
+            # fmt: off
+            pred = re.split(r"|".join(re.escape(word) for word in stop_words), pred, 1)[0]
+            # fmt: on
         return pred.strip()
 
     if dataset not in POSTPROCESS_MAPPING:
@@ -292,7 +294,7 @@ def prepare_dataloader(
             )
         else:
             raise ValueError(
-                "num_shot and num_per_dataset can't be None at the same time."
+                "num_shots and num_per_dataset can't be None at the same time."
             )
 
     num_per_dataset = check_consistent(
