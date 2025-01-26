@@ -36,7 +36,7 @@ class Idefics(ModelBase):
         # fmt: off
         return (
             "{% if messages[0]['role'].lower() in ['instruction', 'system'] %}"
-                "{{ messages[0]['role'].capitalize() + '\n' + messages[0]['content'] + '\n'}}"
+                "{{ messages[0]['role'].capitalize() + ':' + messages[0]['content'] + '\n'}}"
                 "{% set messages = messages[1:] %}"
             "{% endif %}"
             "{% set first_role = messages[0]['role'] %}"

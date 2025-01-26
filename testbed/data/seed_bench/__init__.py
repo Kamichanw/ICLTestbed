@@ -10,16 +10,18 @@ def retriever(item, is_last: bool):
             {"role": "image", "content": [{"type": "image"}] * num_images},
             {
                 "role": "question",
+                "content": [{"type": "text", "text": item["question"]}],
+            },
+            {
+                "role": "choices",
                 "content": [
-                    {"type": "text", "text": item["question"]},
                     {
                         "type": "text",
                         "text": f"A. {item['choice_a']} B. {item['choice_b']} C. {item['choice_c']} D. {item['choice_d']}",
                     },
                     {"type": "text", "text": "Answer with the letter."},
                 ],
-            },
-            (
+            }(
                 {"role": "answer"}
                 if is_last
                 else {
