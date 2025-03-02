@@ -11,7 +11,7 @@ from functools import lru_cache
 import nltk
 from nltk.corpus.reader import VERB
 import inflection
-from testbed.data import register_dataset_retriever, register_postprocess
+from testbed.data.common import register_dataset_retriever, register_postprocess
 
 _MANUAL_MATCHES = {
     "police": "police",
@@ -229,7 +229,7 @@ def dataset_retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": item["answer"],
+                    "content": [{"type": "text", "text": item["answer"]}],
                 }
             ),
         ],

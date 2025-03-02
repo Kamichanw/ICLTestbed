@@ -75,7 +75,6 @@ class VQAv2Config(datasets.BuilderConfig):
 
 
 class VQAv2(datasets.GeneratorBasedBuilder):
-
     VERSION = datasets.Version("1.0.0")
 
     BUILDER_CONFIG_CLASS = VQAv2Config

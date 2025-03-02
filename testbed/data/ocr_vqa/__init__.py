@@ -1,5 +1,5 @@
 from typing import List, Union
-from testbed.data import register_dataset_retriever, register_postprocess
+from testbed.data.common import register_dataset_retriever, register_postprocess
 
 
 @register_dataset_retriever(__name__.split(".")[-1])
@@ -16,7 +16,7 @@ def retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": item["answer"],
+                    "content": {"type": "text", "text": item["answer"]},
                 }
             ),
         ],

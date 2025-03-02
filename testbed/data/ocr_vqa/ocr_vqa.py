@@ -100,13 +100,13 @@ class OCRVQA(datasets.GeneratorBasedBuilder):
             else:
                 image_path = os.path.join(
                     self.config.images_dir,
-                    f"{image_id}{os.path.splitext(info["imageURL"])[1]}",
+                    f"{image_id}{os.path.splitext(info['imageURL'])[1]}",
                 )
                 if not os.path.exists(image_path):
                     try:
                         request.urlretrieve(info["imageURL"], image_path)
                     except Exception as e:
-                        print(f"Failed to download from {info["imageURL"]}, because {e}")
+                        print(f"Failed to download from {info['imageURL']}, because {e}")
                         continue
             for idx, (question, answer) in enumerate(
                 zip(info["questions"], info["answers"])

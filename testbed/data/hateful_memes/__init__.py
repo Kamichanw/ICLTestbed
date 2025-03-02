@@ -1,5 +1,5 @@
 import nltk
-from testbed.data import register_postprocess, register_dataset_retriever
+from testbed.data.common import register_postprocess, register_dataset_retriever
 
 
 @register_dataset_retriever(__name__.split(".")[-1])
@@ -24,7 +24,10 @@ def retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": "yes" if item["label"] == 1 else "no",
+                    "content": {
+                        "type": "text",
+                        "text": "yes" if item["label"] == 1 else "no",
+                    },
                 }
             ),
         ],

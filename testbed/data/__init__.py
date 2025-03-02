@@ -17,6 +17,8 @@ from .sampler import MultiBatchSampler, ConcatSampler
 from .common import (
     POSTPROCESS_MAPPING,
     DATASET_RETRIEVER_MAPPING,
+    register_dataset_retriever,
+    register_postprocess,
 )
 
 # auto import dataset package
@@ -28,81 +30,8 @@ for module_name in os.listdir(os.path.dirname(__file__)):
         importlib.import_module(f".{module_name}", package=__name__)
 
 
-def register_dataset_retriever(dataset_name: str):
-    """
-    Registers a dataset retriever function for a given dataset.
-
-    The retriever function is responsible for converting an individual item from the dataset
-    into the format required for the model's input. It should have the following signature::
-        
-        retriever (item: Any, is_last: bool) -> List[Dict] or Tuple[List[Dict], ...]
-
-    The `item` is an instance from the dataset named `dataset_name`. `is_last` is a boolean 
-    flag indicating whether the item is the last one in the context. The return value should
-    be a huggingface conversation-like object, i.e., a list of dict, or a tuple containing it.
-    
-    Args:
-        dataset_name (str): 
-            The name of the dataset for which the retriever function is being registered.
-            It must be a non-empty string.
-
-    """
-    def decorator(retriever: Callable[[Any, bool], Any]):
-        if not callable(retriever):
-            raise TypeError(f"{retriever.__name__} must be callable.")
-        
-        sig = inspect.signature(retriever)
-        params = list(sig.parameters.values())
-        if len(params) != 2:
-            raise TypeError(f"{retriever.__name__} must accept two arguments: an item and a boolean flag.")
-
-        DATASET_RETRIEVER_MAPPING[dataset_name] = retriever
-
-        @wraps(retriever)
-        def wrapper(*args, **kwargs):
-            return retriever(*args, **kwargs)
-        return wrapper
-    
-    return decorator
-
-
-def register_postprocess(dataset_name: str):
-    """
-    Registers a post-processing function for a given dataset.
-
-    The post-process function modifies the model's output, typically by applying 
-    text normalization techniques. The function should accept a string (or list of strings) 
-    and return a processed string. It should have the following signature::
-    
-        postprocess(text: Union[str, List[str]]) -> Union[str, List[str]]
-
-    Args:
-        dataset_name (str): 
-            The name of the dataset for which the post-process function is being registered.
-            It must be a non-empty string.
-
-    """
-    def decorator(postprocess: Callable[[str], str]):
-        if not callable(postprocess):
-            raise TypeError(f"{postprocess.__name__} must be callable.")
-
-        sig = inspect.signature(postprocess)
-        params = list(sig.parameters.values())
-        if len(params) != 1:
-            raise TypeError(f"{postprocess.__name__} must accept a single string argument.")
-
-
-        POSTPROCESS_MAPPING[dataset_name] = postprocess
-
-        @wraps(postprocess)
-        def wrapper(*args, **kwargs):
-            return postprocess(*args, **kwargs)
-        return wrapper
-    
-    return decorator
-
 def prepare_input(
-    dataset_sources: Union[str, List[str]],
+    dataset_name: Union[str, List[str]],
     batch: List[List[Dict[str, Any]]],
     instruction: Optional[str] = None,
 ) -> Union[List[List[Any]], Tuple[List[List[Any]], ...]]:
@@ -112,7 +41,7 @@ def prepare_input(
     the items in the batch. If no dataset source is provided, the function will raise an error.
 
     Args:
-        dataset_sources (str or List[str]):
+        dataset_name (str or List[str]):
             A string or a list of strings representing the dataset source for each context in the batch.
             If a single string is provided, all contexts are assumed to come from that dataset. If a list is
             provided, its length must match the number of contexts in the batch. Each dataset-specific retriever function
@@ -128,36 +57,36 @@ def prepare_input(
         the dataset-specific retriever functions, and optionally prepended with an instruction.
         If retriever returns more than one results, this method will return in those results in List[List[Any]] as well.
     """
-    if isinstance(dataset_sources, str):
-        dataset_sources = [dataset_sources] * len(batch)
-    elif isinstance(dataset_sources, list):
-        if len(dataset_sources) != len(batch[0]):
+    if isinstance(dataset_name, str):
+        dataset_name = [dataset_name] * len(batch)
+    elif isinstance(dataset_name, list):
+        if len(dataset_name) != len(batch[0]):
             raise ValueError(
-                "Length of dataset_sources list must match the number of items in the context."
+                "Length of dataset_name list must match the number of items in the context."
             )
 
-    for source in dataset_sources:
-        if source not in DATASET_RETRIEVER_MAPPING:
+    for name in dataset_name:
+        if name not in DATASET_RETRIEVER_MAPPING:
             raise ValueError(
-                f"The retriever of '{source}' is not registered, use `register_input_retriever` first."
+                f"The retriever of '{name}' is not registered, use `register_input_retriever` first."
             )
 
     return_annotations = [
-        inspect.signature(DATASET_RETRIEVER_MAPPING[source]).return_annotation
-        for source in dataset_sources
+        inspect.signature(DATASET_RETRIEVER_MAPPING[name]).return_annotation
+        for name in dataset_name
     ]
     if len(set(return_annotations)) > 1:
         raise ValueError("All dataset retrievers must return the same type.")
 
     batch_context, batch_extra_outputs = [], []
 
-    for source, context in zip(dataset_sources, batch):
+    for name, context in zip(dataset_name, batch):
         messages, extra_outputs = [], []
         if instruction is not None:
             messages.append({"role": "instruction", "content": instruction})
 
         for item in context:
-            retriever = DATASET_RETRIEVER_MAPPING[source]
+            retriever = DATASET_RETRIEVER_MAPPING[name]
             prepared_item = retriever(item, item == context[-1])
 
             if isinstance(prepared_item, tuple):
@@ -173,14 +102,10 @@ def prepare_input(
     if batch_extra_outputs[0] and all(
         isinstance(output, tuple) for output in batch_extra_outputs[0]
     ):
-        if (
-            len(
-                set(
-                    len(output) for outputs in batch_extra_outputs for output in outputs
-                )
-            )
-            != 1
-        ):
+        num_extra_outputs = set(
+            len(output) for outputs in batch_extra_outputs for output in outputs
+        )
+        if len(num_extra_outputs) != 1:
             raise RuntimeError(
                 "Inconsistent number of extra outputs across different contexts."
             )
@@ -199,7 +124,7 @@ def prepare_input(
 
 
 def postprocess_generation(
-    dataset: str,
+    dataset_name: str,
     predictions: Union[str, List[str]],
     stop_words: Optional[List[str]] = None,
 ) -> Union[str, List[str]]:
@@ -211,7 +136,7 @@ def postprocess_generation(
 
 
     Args:
-        dataset (str, *optional*):
+        dataset_name (str, *optional*):
             The name of the dataset to apply dataset-specific postprocessing.
         predictions (`Union[str, List[str]]`):
             The generated predictions, either as a single string or a list of strings.
@@ -231,15 +156,17 @@ def postprocess_generation(
 
     def preprocess(pred, stop_words):
         if stop_words is not None:
-            pred = re.split("|".join(stop_words), pred, 1)[0]
+            # fmt: off
+            pred = re.split(r"|".join(re.escape(word) for word in stop_words), pred, 1)[0]
+            # fmt: on
         return pred.strip()
 
-    if dataset not in POSTPROCESS_MAPPING:
+    if dataset_name not in POSTPROCESS_MAPPING:
         raise ValueError(
-            f"The post process method of {dataset} is not registered, use `register_postprocess` first."
+            f"The post process method of {dataset_name} is not registered, use `register_postprocess` first."
         )
     result = [
-        POSTPROCESS_MAPPING[dataset](preprocess(pred, stop_words))
+        POSTPROCESS_MAPPING[dataset_name](preprocess(pred, stop_words))
         for pred in predictions
     ]
 
@@ -363,7 +290,7 @@ def prepare_dataloader(
             )
         else:
             raise ValueError(
-                "num_shot and num_per_dataset can't be None at the same time."
+                "num_shots and num_per_dataset can't be None at the same time."
             )
 
     num_per_dataset = check_consistent(

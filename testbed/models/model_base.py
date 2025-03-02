@@ -49,7 +49,7 @@ class ModelBase(nn.Module, ABC):
         if support_models is not None and self.model_name not in support_models:
             warnings.warn(
                 "The model name cannot be detected automatically in `model_root`, which may lead to unexpected behaviors. "
-                f"make sure basename of model root is in {', '.join(self._support_models)}."
+                f"make sure basename of model root is in {', '.join(support_models)}."
             )
 
         self.config = self.model.config
@@ -413,7 +413,9 @@ class ModelBase(nn.Module, ABC):
         """
         processor_args = processor_args if processor_args else dict()
 
-        inputs = self.process_input(*inputs, **processor_args).to(self.device)
+        inputs = self.process_input(*inputs, **processor_args).to(
+            device=self.device, dtype=self.model.dtype
+        )
         seq_len = inputs.input_ids.shape[-1]  # type: ignore[attr-defined]
 
         generated_ids = self.model.generate(**inputs, **generate_args)
