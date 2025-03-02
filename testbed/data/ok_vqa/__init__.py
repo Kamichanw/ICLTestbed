@@ -229,7 +229,7 @@ def dataset_retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": item["answer"],
+                    "content": [{"type": "text", "text": item["answer"]}],
                 }
             ),
         ],

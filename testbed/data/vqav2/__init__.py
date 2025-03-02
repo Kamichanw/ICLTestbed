@@ -9,14 +9,14 @@ def retriever(item, is_last: bool):
             {"role": "image", "content": [{"type": "image"}]},
             {
                 "role": "question",
-                "content": item["question"],
+                "content": {"type": "text", "text": item["question"]},
             },
             (
                 {"role": "answer"}
                 if is_last
                 else {
                     "role": "answer",
-                    "content": item["answer"],
+                    "content": {"type": "text", "text": item["answer"]},
                 }
             ),
         ],

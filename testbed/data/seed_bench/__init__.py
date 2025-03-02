@@ -21,12 +21,13 @@ def retriever(item, is_last: bool):
                     },
                     {"type": "text", "text": "Answer with the letter."},
                 ],
-            }(
+            },
+            (
                 {"role": "answer"}
                 if is_last
                 else {
                     "role": "answer",
-                    "content": item["answer"],
+                    "content": {"type": "text", "text": item["answer"]},
                 }
             ),
         ],

@@ -26,47 +26,5 @@ I have divided the in-context learning process into four stages: data loading, m
 
 If you want to customize new datasets, models, or metrics, you can follow the suggestions in the [How-to guides](./docs/How-to%20guides.md), or directly raise an issue for me to implement it.
 
-## Overview of Supported Components
-
-<table style="width: 100%; border-collapse: collapse; text-align: center;">
-  <thead>
-    <tr style="border-bottom: 2px solid white; font-weight: bold; vertical-align: middle;">
-      <th style="text-align: center;">Task</th>
-      <th style="text-align: center;">Dataset</th>
-      <th style="text-align: center;">Model</th>
-      <th style="text-align: center;">Metrics</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td rowspan="2" style="vertical-align: middle;">Visual Question Answering</td>
-      <td>VQA v2</td>
-      <td rowspan="4" style="vertical-align: middle;">Idefics <br> Idefics2</td>
-      <td rowspan="2">vqa accuracy</td>
-    </tr>
-    <tr>
-      <td>OK-VQA</td>
-    </tr>
-    <tr>
-      <td style="vertical-align: middle;">Image Captioning</td>
-      <td>COCO (Karpathy split)</td>
-      <td>CIDEr</td>
-    </tr>
-    <tr>
-      <td style="vertical-align: middle;">Visual Reasoning</td>
-      <td>Hateful memes</td>
-      <td>AUC ROC</td>
-    </tr>
-    <tr>
-      <td style="vertical-align: middle;">NLP</td>
-      <td>-</td>
-      <td>Mistral</td>
-      <td>-</td>
-    </tr>
-  </tbody>
-</table>
-
-
-
 ## License
 This project uses the MIT License.
