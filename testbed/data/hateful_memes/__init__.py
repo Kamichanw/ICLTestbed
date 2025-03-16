@@ -24,10 +24,10 @@ def retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": {
+                    "content": [{
                         "type": "text",
                         "text": "yes" if item["label"] == 1 else "no",
-                    },
+                    }],
                 }
             ),
         ],

@@ -121,29 +121,29 @@ class Idefics(ModelBase):
         if isinstance(text[0][0], dict):
             text = self.apply_prompt_template(text, prompt_template=prompt_template)
 
+        assert len(text) == len(images)
+        inputs = []
+        for i, (ctx, image_list) in enumerate(zip(text, images)):
+            text_parts = ctx.split("<image>")
+
+            if len(text_parts) - 1 != len(image_list):
+                raise ValueError(
+                    f"In the {i}-th input, the number of images {len(image_list)} does "
+                    f"not match the number of image tokens {len(text_parts) - 1} in the text."
+                )
+            result = []
+            for seg, image in zip(text_parts, image_list):
+                if seg != "":
+                    result.append(seg)
+                result.append(image)
+            if text_parts[-1] != "":  # the last question without answer
+                result.append(text_parts[-1])
+            inputs.append(result)
+
         if version.parse(transformers.__version__) < version.parse("4.46.0"):
-            assert len(text) == len(images)
-            inputs = []
-            for i, (ctx, image_list) in enumerate(zip(text, images)):
-                text_parts = ctx.split("<image>")
-
-                if len(text_parts) - 1 != len(image_list):
-                    raise ValueError(
-                        f"In the {i}-th input, the number of images {len(image_list)} does "
-                        f"not match the number of image tokens {len(text_parts) - 1} in the text."
-                    )
-                result = []
-                for seg, image in zip(text_parts, image_list):
-                    if seg != "":
-                        result.append(seg)
-                    result.append(image)
-                if text_parts[-1] != "":  # the last question without answer
-                    result.append(text_parts[-1])
-                inputs.append(result)
-
             process = partial(self.processor, prompts=inputs)
         else:
-            process = partial(self.processor, text=text, images=images)
+            process = partial(self.processor, text=inputs)
 
         return process(
             padding=kwargs.pop("padding", True),
