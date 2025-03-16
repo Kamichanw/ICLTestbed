@@ -139,7 +139,7 @@ class Idefics(ModelBase):
             if text_parts[-1] != "":  # the last question without answer
                 result.append(text_parts[-1])
             inputs.append(result)
-
+            
         if version.parse(transformers.__version__) < version.parse("4.46.0"):
             process = partial(self.processor, prompts=inputs)
         else:
