@@ -16,7 +16,7 @@ def retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "answer",
-                    "content": {"type": "text", "text": item["answer"]},
+                    "content": [{"type": "text", "text": item["answer"]}],
                 }
             ),
         ],

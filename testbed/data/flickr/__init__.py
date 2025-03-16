@@ -12,7 +12,7 @@ def retriever(item, is_last: bool):
                 if is_last
                 else {
                     "role": "caption",
-                    "content": {"type": "text", "text": item["caption"]},
+                    "content": [{"type": "text", "text": item["caption"]}],
                 }
             ),
         ],
